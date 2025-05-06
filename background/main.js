@@ -28,7 +28,7 @@ const mysqlPool = mysql.createPool({
             continue;
         }
 
-        console.log("Judging ", submissionId);        
+        console.log("Judging ", submissionId);
 
         try {
             // 1. Load submission + question
@@ -67,7 +67,28 @@ const mysqlPool = mysql.createPool({
 
             for (let test of tests) {
                 console.log(test.toString().length, test.toString());
+
+
+
+                if (false) {
+                    const str = "solve(...args){ return args.reduce((a, b) => a + b, 0); }";
+
+                    // Extract function body
+                    const bodyMatch = str.match(/{([\s\S]*)}/);
+                    const body = bodyMatch[1];
+
+                    // Create a new function that accepts any number of arguments
+                    const solve = new Function('...args', body);
+
+                    // Call it with any number of arguments
+                    console.log(solve(1, 2, 3, 4)); // Output: 10
+
+                }
+
+
                 const pass = answer.length > (body.length + test.toString().length);
+
+
                 if (!pass) failed++;
             }
 

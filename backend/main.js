@@ -30,22 +30,28 @@ app.get('/api/hello', (req, res) => {
 });
 
 // LOGIN SIGNUP
-app.get('/api/users/emails', async (req, res) => {
-  try {
-    // const pool = req.app.locals.pool;
-    const [rows] = await mysqlPool.query('SELECT * FROM users');
+// app.get('/api/users/emails', async (req, res) => {
+//   try {
+//     // const pool = req.app.locals.pool;
+//     const [rows] = await mysqlPool.query('SELECT * FROM users');
 
-    const emails = rows.map(row => row.email);
-    res.json({ emails });
-  } catch (err) {
-    console.error('Error fetching user emails:', err.message);
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
+//     const emails = rows.map(row => row.email);
+//     res.json({ emails });
+//   } catch (err) {
+//     console.error('Error fetching user emails:', err.message);
+//     res.status(500).json({ error: 'Internal Server Error' });
+//   }
+// });
+
+const defaultCookieAttr = {
+  path: '/',
+  maxAge: 1000 * 60 * 60 * 24 * 30,
+  httpOnly: false,
+  secure: false,
+  sameSite: 'lax'
+};
 
 app.post('/api/signup', async (req, res) => {
-  console.log(typeof (req.body));
-  console.log(req.body);
   const { email, nickname } = req.body;
   if (!email || !nickname) return res.status(400).json({ error: 'email and nickname required' });
 
@@ -55,13 +61,7 @@ app.post('/api/signup', async (req, res) => {
       [email, nickname]
     );
     const userId = result.insertId;
-    res.cookie('userId', userId, {
-      path: '/',
-      maxAge: 1000 * 60 * 60 * 24 * 30,
-      httpOnly: false,
-      secure: false,
-      sameSite: 'lax'
-    });
+    res.cookie('userId', userId, defaultCookieAttr);
     res.json({ success: true, userId });
   } catch (e) {
     if (e.code === 'ER_DUP_ENTRY') {
@@ -73,15 +73,18 @@ app.post('/api/signup', async (req, res) => {
 });
 
 app.post('/api/login', async (req, res) => {
-  const { userId } = req.body;
-  if (!userId) return res.status(400).json({ error: 'userId required' });
+  const { nickname } = req.body;
 
-  const [rows] = await mysqlPool.query('SELECT * FROM users WHERE id = ?', [userId]);
+  if (!nickname) return res.status(400).json({ error: 'nickname required' });
+
+  const [rows] = await mysqlPool.query('SELECT * FROM users WHERE nickname = ?', [nickname]);
   if (rows.length === 0) return res.status(404).json({ error: 'User not found' });
 
-  res.cookie('userId', userId, { httpOnly: true });
-  res.json({ success: true });
+  res.cookie('userId', rows[0].id, defaultCookieAttr);
+  res.json({ success: true, userId });
 });
+
+
 
 app.get('/api/questions', async (req, res) => {
   const [rows] = await mysqlPool.query('SELECT * FROM questions');
@@ -125,8 +128,7 @@ app.get('/api/questions/:id/submissions', async (req, res) => {
     `SELECT id, language, status, nfailed, time_used_msec, created_at
      FROM submissions
      WHERE user_id = ? AND question_id = ?
-     ORDER BY id DESC
-     LIMIT 10`,
+     ORDER BY id DESC`,
     [userId, questionId]
   );
 
