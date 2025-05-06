@@ -1,0 +1,77 @@
+services:
+
+  hello:
+    image: hashicorp/http-echo
+    container_name: service-hello
+    ports:
+      - "5678:5678"
+    expose:
+      - "5678"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: dockerfile
+    image: ${IMAGE_PREFIX:-}frontend:${VERSION:-latest}
+    container_name: service-frontend
+    expose:
+      - "5173"
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: dockerfile
+    image: ${IMAGE_PREFIX:-}backend:${VERSION:-latest}
+    container_name: service-backend
+    expose:
+      - "3000"
+    environment:
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=password
+      - MYSQL_DATABASE=myapp
+      - MYSQL_HOST=mysql
+
+  background:
+    build:
+      context: ./background
+      dockerfile: dockerfile
+    image: ${IMAGE_PREFIX:-}background:${VERSION:-latest}
+    container_name: service-background
+    environment:
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=password
+      - MYSQL_DATABASE=myapp
+      - MYSQL_HOST=mysql
+
+  redis:
+    image: redis
+    container_name: service-redis
+    ports:
+      - "6379:6379"
+  
+  mysql:
+    image: mysql:8.0
+    container_name: service-mysql
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+      - MYSQL_DATABASE=myapp
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+
+
+  nginx:
+    image: nginx:latest
+    container_name: nginx-proxy
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend
+      - hello
+      
+
+
