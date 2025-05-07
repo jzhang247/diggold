@@ -1,0 +1,69 @@
+name: general-availability-src
+
+on:
+  workflow_dispatch:
+permissions:
+  contents: write 
+jobs:
+  main:
+    runs-on: ubuntu-latest
+    environment: main
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get latest RC tag
+        id: get_rc
+        run: |
+          LATEST_RC=$(git describe --tags --match 'v*-rc.*' --abbrev=0)
+          RC_COMMIT=$(git rev-list -n 1 $LATEST_RC)
+          echo "rc_tag=$LATEST_RC"
+          echo "rc_commit=$RC_COMMIT"
+          echo "rc_tag=$LATEST_RC" >> $GITHUB_OUTPUT
+          echo "rc_commit=$RC_COMMIT" >> $GITHUB_OUTPUT
+
+      # - name: Verify RC is latest
+      #   run: |
+      #     LATEST_TAG=$(git describe --tags --abbrev=0)
+      #     if [[ "$LATEST_TAG" != "${{ steps.get_rc.outputs.rc_tag }}" ]]; then
+      #       echo "Error: Latest tag is not an RC tag"
+      #       exit 1
+      #     fi
+
+      - name: Create GA tag
+        id: create_ga
+        run: |
+          if [[ ${{ steps.get_rc.outputs.rc_tag }} =~ (v[0-9]+\.[0-9]+\.[0-9]+)-rc\.[0-9]+ ]]; then
+            GA_VERSION="${BASH_REMATCH[1]}"
+            echo "ga_version=$GA_VERSION" >> $GITHUB_OUTPUT
+            git tag $GA_VERSION ${{ steps.get_rc.outputs.rc_commit }}
+          else
+            echo "Invalid RC tag format"
+            exit 1
+          fi
+
+      - name: Push GA tag
+        run: git push origin ${{ steps.create_ga.outputs.ga_version }}
+
+      - name: Dispatch to infra repo
+        env:
+          PAT: ${{ secrets.PAT }}
+          INFRA_REPO: ${{ secrets.URL_INFRA_REPO }}
+        run: |
+          api_url="https://api.github.com/repos/$INFRA_REPO/actions/workflows/general-availability.yml/dispatches"
+
+          curl -X POST \
+            -H "Authorization: token $PAT" \
+            -H "Accept: application/vnd.github+json" \
+            "$api_url" \
+            -d @- <<EOF
+            {
+              "ref": "main",
+              "inputs": {
+                "new_tag": "${{ steps.create_ga.outputs.ga_version }}",
+                "old_tag": "${{ steps.get_rc.outputs.rc_tag }}"
+              }
+            }
+          EOF

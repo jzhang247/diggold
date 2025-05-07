@@ -1,0 +1,140 @@
+name: release-candidate-src
+
+on:
+  workflow_dispatch:
+permissions:
+  contents: write 
+jobs:
+  main:
+    runs-on: ubuntu-latest
+    environment: main
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get latest nightly tag
+        id: get_nightly
+        run: |
+          LATEST_NB=$(git describe --tags --match 'nb-*' --abbrev=0)
+          NB_COMMITISH=$(git rev-list -n 1 $LATEST_NB)
+          echo "nb_tag=$LATEST_NB" >> $GITHUB_OUTPUT
+          echo "nb_commit=$NB_COMMITISH" >> $GITHUB_OUTPUT
+
+      - name: Get latest version tags
+        id: get_versions
+        run: |
+          # Get latest GA and RC tags
+          LATEST_GA=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -v - | head -n 1)
+          LATEST_RC=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*-rc.*' --sort=-v:refname | head -n 1)
+
+          # Handle initial version scenario
+          if [ -z "$LATEST_RC" ] && [ -z "$LATEST_GA" ]; then
+            echo "base_version=none" >> $GITHUB_OUTPUT
+            echo "version_type=initial" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Determine newer version between GA and RC
+          if [ -z "$LATEST_RC" ]; then
+            BASE_VERSION=$LATEST_GA
+            VERSION_TYPE="ga"
+          elif [ -z "$LATEST_GA" ]; then
+            BASE_VERSION=$LATEST_RC
+            VERSION_TYPE="rc"
+          else
+            GA_DATE=$(git log -1 --format=%ct $LATEST_GA)
+            RC_DATE=$(git log -1 --format=%ct $LATEST_RC)
+            if [ $GA_DATE -gt $RC_DATE ]; then
+              BASE_VERSION=$LATEST_RC
+              VERSION_TYPE="rc"
+            else
+              BASE_VERSION=$LATEST_GA
+              VERSION_TYPE="ga"
+            fi
+          fi
+          
+          echo "base_version=$BASE_VERSION"
+          echo "version_type=$VERSION_TYPE"
+          echo "base_version=$BASE_VERSION" >> $GITHUB_OUTPUT
+          echo "version_type=$VERSION_TYPE" >> $GITHUB_OUTPUT
+
+      - name: Calculate new version
+        id: calculate_version
+        run: |
+          if [ "${{ steps.get_versions.outputs.version_type }}" = "initial" ]; then
+            NEW_VERSION="v1.0.0-rc.1"
+          elif [ "${{ steps.get_versions.outputs.version_type }}" = "rc" ]; then
+            # RC version increment
+            if [[ ${{ steps.get_versions.outputs.base_version }} =~ (v[0-9]+\.[0-9]+\.[0-9]+)-rc\.([0-9]+) ]]; then
+              BASE=${BASH_REMATCH[1]}
+              RC_NUM=$((${BASH_REMATCH[2]} + 1))
+              NEW_VERSION="$BASE-rc.$RC_NUM"
+            fi
+          else
+            # GA-based version increment
+            COMMITS=$(git log ${{ steps.get_versions.outputs.base_version }}..${{ steps.get_nightly.outputs.nb_commit }} --pretty=format:%s)
+            
+            BUMP="patch"
+            while IFS= read -r commit; do
+              if [[ $commit == "!"* ]]; then
+                BUMP="major"
+                break
+              elif [[ $commit == "feat"* ]] && [ "$BUMP" != "major" ]; then
+                BUMP="minor"
+              fi
+            done <<< "$COMMITS"
+            
+            # Parse and increment version
+            if [[ ${{ steps.get_versions.outputs.base_version }} =~ v([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+              MAJOR=${BASH_REMATCH[1]}
+              MINOR=${BASH_REMATCH[2]}
+              PATCH=${BASH_REMATCH[3]}
+              
+              case $BUMP in
+                "major")
+                  MAJOR=$((MAJOR + 1))
+                  MINOR=0
+                  PATCH=0
+                  ;;
+                "minor")
+                  MINOR=$((MINOR + 1))
+                  PATCH=0
+                  ;;
+                "patch")
+                  PATCH=$((PATCH + 1))
+                  ;;
+              esac
+              NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}-rc.1"
+            fi
+          fi
+          
+          echo "new_version=$NEW_VERSION"
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create and push RC tag
+        run: |
+          git tag ${{ steps.calculate_version.outputs.new_version }} ${{ steps.get_nightly.outputs.nb_commit }}
+          git push origin ${{ steps.calculate_version.outputs.new_version }}
+
+      - name: Dispatch to infra repo
+        env:
+          PAT: ${{ secrets.PAT }}
+          INFRA_REPO: ${{ secrets.URL_INFRA_REPO }}
+        run: |
+          api_url="https://api.github.com/repos/$INFRA_REPO/actions/workflows/release-candidate.yml/dispatches"
+
+          curl -X POST \
+            -H "Authorization: token $PAT" \
+            -H "Accept: application/vnd.github+json" \
+            "$api_url" \
+            -d @- <<EOF
+          {
+            "ref": "main",
+            "inputs": {
+              "new_tag": "${{ steps.calculate_version.outputs.new_version }}",
+              "old_tag": "${{ steps.get_nightly.outputs.nb_tag }}"
+            }
+          }
+          EOF

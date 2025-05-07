@@ -1,0 +1,138 @@
+name: create-admin-station
+
+on:
+  workflow_dispatch:
+jobs:
+  main:
+    runs-on: ubuntu-latest
+    environment: main
+    steps:
+
+      - name: Set up AWS credentials file
+        run: |
+          mkdir -p ~/.aws
+          echo "${{ secrets.AWS_CREDENTIALS }}" > ~/.aws/credentials
+          chmod 600 ~/.aws/credentials
+
+
+
+
+
+
+
+      # - name: Set up SSH pem
+      #   run: |
+      #     mkdir -p ~/.ssh
+      #     echo "${{ secrets.AWS_PEM }}" > ~/.ssh/aws.pem
+      #     chmod 600 ~/.ssh/aws.pem
+
+
+
+
+
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Run EC2 provisioning script
+        run: |
+            chmod +x ./admin-station/create.bash
+            export REGION=${{ vars.REGION }}
+            ./admin-station/create.bash
+
+      - name: Set up pem just generated
+        run: |
+          mkdir -p ~/.ssh
+          cp aws.pem ~/.ssh/aws.pem
+
+      - name: Upload PEM key as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aws.pem
+          path: ~/.ssh/aws.pem
+
+
+
+
+      
+
+      - name: SSH into EC2 instance
+        run: |          
+          INSTANCE_IP=$(aws ec2 describe-instances \
+            --region ${{ vars.REGION }} \
+            --filters "Name=tag:Name,Values=admin-station" "Name=instance-state-name,Values=running" \
+            --query "Reservations[0].Instances[0].PublicIpAddress" \
+            --output text)
+          echo Will SSH to $INSTANCE_IP
+
+          echo "Waiting for EC2 SSH to become ready..."
+          for i in {1..30}; do
+            if ssh -o StrictHostKeyChecking=no -i ~/.ssh/aws.pem ubuntu@"$INSTANCE_IP" 'echo EC2 is ready' 2>/dev/null; then
+              echo "SSH is ready"
+              break
+            else
+              echo "Waiting for SSH... ($i/30)"
+              sleep 10
+            fi
+          done
+
+          echo "Connecting to EC2..."
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/aws.pem ubuntu@"$INSTANCE_IP" << 'EOF'
+            echo hello from admin station
+
+            
+            # Install stuff
+
+            mkdir download
+            cd download
+            # AWS
+            sudo apt update
+            sudo apt install -y unzip curl
+            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+            unzip awscliv2.zip
+            sudo ./aws/install
+            aws --version
+
+            # Terraform
+            sudo apt-get update && sudo apt-get install -y gnupg software-properties-common
+            curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+            echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+            sudo apt update && sudo apt install terraform
+            terraform --version
+
+            # Kubectl
+            curl -LO "https://dl.k8s.io/release/$(curl -Ls https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+            chmod +x kubectl
+            sudo mv kubectl /usr/local/bin/
+            kubectl version --client
+            cd ..
+
+
+            
+            # Install AWS Credential
+            mkdir -p ~/.aws
+            echo "${{ secrets.AWS_CREDENTIALS }}" > ~/.aws/credentials
+            chmod 600 ~/.aws/credentials
+
+            # Grand setup
+            rm -rf ./infra
+            git clone https://${{ secrets.PAT }}@github.com/${{ secrets.URL_INFRA_REPO }} infra
+            cd infra
+            cd infra
+            echo "hosted_zone_name=\"${{ vars.DOMAIN }}\"" > terraform.tfvars
+            echo "region=\"${{ vars.REGION }}\"" >> terraform.tfvars
+            terraform init
+            terraform apply --auto-approve
+
+
+            export DOMAIN=${{ vars.DOMAIN }}
+            export REGION=${{ vars.REGION }}
+            EC2_NAME=server-qa RECORD_NAME=qa.${{ vars.DOMAIN }} ./add-route53-record-ec2.bash
+            EC2_NAME=server-uat RECORD_NAME=uat.${{ vars.DOMAIN }} ./add-route53-record-ec2.bash
+
+
+
+            
+          EOF
+
+
+

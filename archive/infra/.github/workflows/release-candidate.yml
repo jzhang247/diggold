@@ -1,0 +1,125 @@
+name: release-candidate-infra
+
+on:
+  workflow_dispatch:
+    inputs:
+      new_tag:
+        description: 'New tag to apply'
+        required: true
+      old_tag:
+        description: 'Existing tag to copy'
+        required: true
+
+
+jobs:
+  main:
+    runs-on: ubuntu-latest
+    environment: main
+    steps:
+      - name: Configure AWS credentials
+        shell: bash
+        run: |
+          mkdir -p ~/.aws
+          echo "${{ secrets.AWS_CREDENTIALS }}" > ~/.aws/credentials
+          chmod 600 ~/.aws/credentials
+
+
+      - name: Configure AWS credentials
+        shell: bash
+        run: |
+          mkdir -p ~/.aws
+          echo "${{ secrets.AWS_CREDENTIALS }}" > ~/.aws/credentials
+          chmod 600 ~/.aws/credentials
+
+      - name: Get AWS account ID
+        id: aws_id
+        run: |
+          AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          echo "AWS_ACCOUNT_ID=$AWS_ACCOUNT_ID" >> $GITHUB_OUTPUT
+
+      - name: Login to ECR
+        run: |
+          aws ecr get-login-password --region ${{ vars.REGION }} | docker login --username AWS --password-stdin ${{ steps.aws_id.outputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.REGION }}.amazonaws.com
+
+
+      - name: Retag ECR Image
+        run: |
+          for svc in frontend backend background
+          do
+            old_image="${{ steps.aws_id.outputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.REGION }}.amazonaws.com/$svc:${{ inputs.old_tag }}"
+            new_image="${{ steps.aws_id.outputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.REGION }}.amazonaws.com/$svc:${{ inputs.new_tag }}"
+            docker pull "$old_image"
+            docker tag "$old_image" "$new_image"
+            docker push "$new_image"
+          done
+
+      - name: Set up SSH pem
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.AWS_PEM }}" > ~/.ssh/aws.pem
+          chmod 600 ~/.ssh/aws.pem
+
+      # - name: Deploy to UAT server
+      #   run: |
+      #     echo "Connecting to EC2..."
+      #     ssh -o StrictHostKeyChecking=no -i ~/.ssh/aws.pem ubuntu@UAT.${{ vars.DOMAIN }} << 'EOF'
+      #       echo hello from admin station
+
+      #       # Install stuff
+      #       mkdir -p download
+      #       cd download
+
+      #       # AWS
+      #       if ! command -v aws &> /dev/null; then
+      #         echo "Installing AWS CLI..."
+      #         sudo apt update
+      #         sudo apt install -y unzip curl
+      #         curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+      #         unzip awscliv2.zip
+      #         sudo ./aws/install
+      #         aws --version
+      #       else
+      #         echo "AWS CLI already installed: $(aws --version)"
+      #       fi
+
+      #       # Docker            
+      #       if ! command -v docker &> /dev/null; then
+      #         echo "Installing Docker..."
+      #         sudo apt-get update
+      #         sudo apt-get install -y ca-certificates curl
+      #         sudo install -m 0755 -d /etc/apt/keyrings
+      #         sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+      #         sudo chmod a+r /etc/apt/keyrings/docker.asc
+      #         echo \
+      #           "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+      #           $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" | \
+      #           sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+      #         sudo apt-get update
+      #         sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+      #         sudo usermod -aG docker $USER
+      #         newgrp docker            
+      #       else
+      #         echo "Docker already installed: $(docker --version)"
+      #       fi
+
+      #       cd ..
+            
+
+      #       # Install AWS Credential
+      #       mkdir -p ~/.aws
+      #       echo "${{ secrets.AWS_CREDENTIALS }}" > ~/.aws/credentials
+      #       chmod 600 ~/.aws/credentials
+
+
+      #       rm -rf ./infra
+      #       git clone https://${{ secrets.PAT }}@github.com/${{ secrets.URL_INFRA_REPO }} infra
+      #       cd infra
+      #       cd infra
+
+      #       aws ecr get-login-password --region ${{ vars.REGION }} | docker login --username AWS --password-stdin ${{ steps.aws_id.outputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.REGION }}.amazonaws.com
+      #       docker compose down -v
+      #       IMAGE_PREFIX=${{ steps.aws_id.outputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.REGION }}.amazonaws.com/ VERSION=${{ inputs.new_tag }} docker compose up -d --force-recreate
+
+
+
+      #     EOF

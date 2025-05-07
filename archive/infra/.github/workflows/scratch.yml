@@ -1,0 +1,61 @@
+name: scratch
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment: main
+    steps:
+      - name: Set up AWS credentials file
+        run: |
+          mkdir -p ~/.aws
+          echo "${{ secrets.AWS_CREDENTIALS }}" > ~/.aws/credentials
+          chmod 600 ~/.aws/credentials
+
+      - name: Set up SSH pem
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.AWS_PEM }}" > ~/.ssh/aws.pem
+
+      - name: Install AWS CLI
+        run: |
+          sudo apt-get update && sudo apt-get install -y awscli
+
+      - name: SSH into EC2 instance
+        run: |
+          INSTANCE_IP=$(aws ec2 describe-instances \
+            --region $REGION \
+            --filters "Name=tag:Name,Values=admin-station" "Name=instance-state-name,Values=running" \
+            --query "Reservations[0].Instances[0].PublicIpAddress" \
+            --output text)
+
+          echo "Waiting for EC2 SSH to become ready..."
+          for i in {1..30}; do
+            if ssh -o StrictHostKeyChecking=no -i aws.pem ubuntu@"$INSTANCE_IP" 'echo EC2 is ready' 2>/dev/null; then
+              echo "SSH is ready"
+              break
+            else
+              echo "Waiting for SSH... ($i/30)"
+              sleep 10
+            fi
+          done
+
+          echo "Connecting to EC2..."
+          ssh -o StrictHostKeyChecking=no -i aws.pem ubuntu@"$INSTANCE_IP" << 'EOF'
+            git clone https://${{ secrets.PAT }}@github.com/${{ secrets.URL_INFRA_REPO }} infra
+            cd infra
+            ./admin-station/hello-ssh.bash
+          EOF
+
+      
+
+
+
+      
+
+
+      # - name: Run a multi-line script
+      #   run: |
+      #     echo ${{vars.REGION}}
+      #     echo ${{secrets.AWS_CREDENTIALS}}

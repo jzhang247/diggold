@@ -1,0 +1,55 @@
+name: nightly-build-src
+
+on:
+  workflow_dispatch:
+permissions:
+  contents: write 
+jobs:
+  main:
+    runs-on: ubuntu-latest
+    environment: main
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Create timestamp tag
+        id: tag
+        run: |
+          tag_name="nb-$(date -u +%Y%m%d-%H%M%S)"
+          echo "tag_name=$tag_name" >> $GITHUB_OUTPUT
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git tag "$tag_name"
+          git push origin "$tag_name"
+
+      - name: Find previous nb- tag
+        id: prev
+        run: |
+          prev_tag=$(git tag --sort=-creatordate | grep '^nb-' | grep -v "${{ steps.tag.outputs.tag_name }}" | head -n 1 || true)
+          echo "previous_tag=$prev_tag"
+          echo "previous_tag=$prev_tag" >> $GITHUB_OUTPUT
+
+      
+
+      - name: Dispatch to infra repo
+        env:
+          PAT: ${{ secrets.PAT }}
+          INFRA_REPO: ${{ secrets.URL_INFRA_REPO }}
+        run: |
+          api_url="https://api.github.com/repos/$INFRA_REPO/actions/workflows/nightly-build.yml/dispatches"
+
+          curl -X POST \
+            -H "Authorization: token $PAT" \
+            -H "Accept: application/vnd.github+json" \
+            "$api_url" \
+            -d @- <<EOF
+          {
+            "ref": "main",
+            "inputs": {
+              "new_tag": "${{ steps.tag.outputs.tag_name }}",
+              "previous_tag": "${{ steps.prev.outputs.previous_tag }}"
+            }
+          }
+          EOF

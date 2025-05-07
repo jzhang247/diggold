@@ -1,0 +1,55 @@
+name: release-candidate-infra
+
+on:
+  workflow_dispatch:
+    inputs:
+      new_tag:
+        description: 'New tag to apply'
+        required: true
+      old_tag:
+        description: 'Existing tag to copy'
+        required: true
+
+
+jobs:
+  main:
+    runs-on: ubuntu-latest
+    environment: main
+    steps:
+      - name: Configure AWS credentials
+        shell: bash
+        run: |
+          mkdir -p ~/.aws
+          echo "${{ secrets.AWS_CREDENTIALS }}" > ~/.aws/credentials
+          chmod 600 ~/.aws/credentials
+
+
+      - name: Configure AWS credentials
+        shell: bash
+        run: |
+          mkdir -p ~/.aws
+          echo "${{ secrets.AWS_CREDENTIALS }}" > ~/.aws/credentials
+          chmod 600 ~/.aws/credentials
+
+      - name: Get AWS account ID
+        id: aws_id
+        run: |
+          AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          echo "AWS_ACCOUNT_ID=$AWS_ACCOUNT_ID" >> $GITHUB_OUTPUT
+
+      - name: Login to ECR
+        run: |
+          aws ecr get-login-password --region ${{ vars.REGION }} | docker login --username AWS --password-stdin ${{ steps.aws_id.outputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.REGION }}.amazonaws.com
+
+
+      - name: Retag ECR Image
+        run: |
+          for svc in frontend backend background
+          do
+            old_image="${{ steps.aws_id.outputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.REGION }}.amazonaws.com/$svc:${{ inputs.old_tag }}"
+            new_image="${{ steps.aws_id.outputs.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.REGION }}.amazonaws.com/$svc:${{ inputs.new_tag }}"
+            docker pull "$old_image"
+            docker tag "$old_image" "$new_image"
+            docker push "$new_image"
+          done
+
