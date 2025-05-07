@@ -1,0 +1,86 @@
+# backend-blue deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-blue
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend-blue
+  template:
+    metadata:
+      labels:
+        app: backend-blue
+    spec:
+      containers:
+      - name: backend
+        image: 932103114236.dkr.ecr.us-east-1.amazonaws.com/backend:v1.0.0
+        ports:
+        - containerPort: 3000
+        env:
+        - name: MYSQL_HOST
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: MYSQL_HOST
+        - name: MYSQL_USER
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: MYSQL_USER
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: MYSQL_PASSWORD
+        - name: MYSQL_DATABASE
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: MYSQL_DATABASE
+---
+# frontend-blue deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-blue
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend-blue
+  template:
+    metadata:
+      labels:
+        app: frontend-blue
+    spec:
+      containers:
+      - name: frontend
+        image: 932103114236.dkr.ecr.us-east-1.amazonaws.com/frontend:v1.0.0
+        ports:
+        - containerPort: 5173
+---
+# backend service pointing to blue
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+spec:
+  selector:
+    app: backend-blue
+  ports:
+  - port: 3000
+    targetPort: 3000
+---
+# frontend service pointing to blue
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+spec:
+  selector:
+    app: frontend-blue
+  ports:
+  - port: 5173
+    targetPort: 5173
