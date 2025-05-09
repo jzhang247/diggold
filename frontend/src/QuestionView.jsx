@@ -9,15 +9,15 @@ export default function QuestionView({ id }) {
       .then(setQuestion);
   }, [id]);
 
-  const [answer, setAnswer] = useState('');
-  const [language, setLanguage] = useState('python');
+  const [response, setResponse] = useState('');
+  const [language, setLanguage] = useState('JavaScript');
   const [submissions, setSubmissions] = useState([]);
 
   const submit = async () => {
     await fetch(`/api/questions/${id}/submit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ answer, language })
+      body: JSON.stringify({ response, language })
     });
     loadSubmissions(); // reload after submit
   };
@@ -42,14 +42,10 @@ export default function QuestionView({ id }) {
       <h4>For dev</h4>
       <p>{question.answer}</p>
       <p>{question.testcases}</p>
-      {/* <h2>{question.title}</h2>
-      <p><strong>Difficulty:</strong> {question.difficulty}</p>
-      <pre>{question.body}</pre>
-      <h4>Answer (for dev):</h4>      <pre>{question.answer}</pre>
-      <h4>Testcases:</h4>      <pre>{question.testcases}</pre> */}
 
       <h3>To make your submission</h3>
       <select value={language} onChange={e => setLanguage(e.target.value)}>
+        <option value="JavaScript">JavaScript</option>
         <option value="cpp23">cpp23</option>
         <option value="python">python</option>
       </select>
@@ -57,8 +53,8 @@ export default function QuestionView({ id }) {
       <textarea
         rows={50}
         style={{ width: '100%' }}
-        value={answer}
-        onChange={e => setAnswer(e.target.value)}
+        value={response}
+        onChange={e => setResponse(e.target.value)}
       />
       <br />
       <button onClick={submit}>Submit</button>

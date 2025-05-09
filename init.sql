@@ -22,9 +22,9 @@ CREATE TABLE questions (
 );
 
 INSERT INTO questions (title, difficulty, body, answer, testcases) VALUES 
-("Two sum",   'Easy',   "returns the sum of two integers",   "int solve(int a, int b){return a+b;}",                   "[[1,3],[2,4]]"),
-("Three sum", 'Medium', "returns the sum of three integers", "int solve(int a, int b, int c){return a+b+c;}",          "[[1,3,5],[2,4,6]]"),
-("Four sum",  'Hard',   "returns the sum of four integers",  "int solve(int a, int b, int c, int d){return a+b+c+d;}", "[[1,3,5,6],[2,4,6,10000000000000000]]");
+("Two sum",   'Easy',   "returns the sum of two integers",   " (a, b)=>{return a+b;}",           "[[1,3],[2,4],[1,1]]"),
+("Three sum", 'Medium', "returns the sum of three integers", " (a, b, c)=>{return a+b+c;}",      "[[1,3,5],[2,4,6]]"),
+("Four sum",  'Hard',   "returns the sum of four integers",  " (a, b, c, d)=>{return a+b+c+d;}", "[[1,3,5,6],[2,4,6,10000000000000000]]");
 
 
 CREATE TABLE submissions (
@@ -32,9 +32,9 @@ CREATE TABLE submissions (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     question_id INT NOT NULL,
     user_id INT NOT NULL,
-    answer TEXT NOT NULL,
+    response TEXT NOT NULL,
     language VARCHAR(50) NOT NULL,
-    status ENUM('INQUEUE', 'JUDGING', 'PASSED', 'FAILED', "ERROR") NOT NULL,
+    status ENUM('INQUEUE', 'JUDGING', 'PASSED', 'WRONG_ANSWER', "TIMEOUT", "SERVER_ERROR") NOT NULL,
     nfailed INT NOT NULL,
     time_used_msec INT DEFAULT NULL
 );

@@ -17,6 +17,12 @@ const mysqlPool = mysql.createPool({
 });
 
 
+function judge_JavaScript(solve, arg) {
+    const expr = `(${solve})(...${arg})`;    
+    return eval(expr);
+}
+
+
 (async () => {
     await redisClient.connect();
 
@@ -33,10 +39,10 @@ const mysqlPool = mysql.createPool({
         try {
             // 1. Load submission + question
             const [[submission]] = await mysqlPool.query(
-                `SELECT s.id, s.answer, q.body, q.testcases, q.time_allowed_msec
-             FROM submissions s
-             JOIN questions q ON s.question_id = q.id
-             WHERE s.id = ?`,
+                `SELECT s.id, s.response, s.language, q.body, q.testcases, q.time_allowed_msec, q.answer
+                 FROM submissions s
+                 JOIN questions q ON s.question_id = q.id
+                 WHERE s.id = ?`,
                 [submissionId]
             );
 
@@ -45,7 +51,9 @@ const mysqlPool = mysql.createPool({
                 continue;
             }
 
-            const { answer, body, testcases, time_allowed_msec } = submission;
+            const { answer, body, testcases, time_allowed_msec, language, response } = submission;
+
+            console.log("queryRslt: ", { answer, body, testcases, time_allowed_msec, language, response });
 
             // 2. Parse testcases (assume it's a JSON array of strings)
             let tests;
@@ -55,52 +63,40 @@ const mysqlPool = mysql.createPool({
             } catch {
                 console.error(`Invalid testcases in question for submission ${submissionId}`);
                 await mysqlPool.query(
-                    `UPDATE submissions SET status = 'FAILED', nfailed = 0 WHERE id = ?`,
+                    `UPDATE submissions SET status = 'SERVER_ERROR', nfailed = 0 WHERE id = ?`,
                     [submissionId]
                 );
                 continue;
             }
 
-            // 3. Dummy judge logic
+            // 3. judge logic
             let failed = 0;
             const start = Date.now();
 
             for (let test of tests) {
-                console.log(test.toString().length, test.toString());
-
-
-
-                if (false) {
-                    const str = "solve(...args){ return args.reduce((a, b) => a + b, 0); }";
-
-                    // Extract function body
-                    const bodyMatch = str.match(/{([\s\S]*)}/);
-                    const body = bodyMatch[1];
-
-                    // Create a new function that accepts any number of arguments
-                    const solve = new Function('...args', body);
-
-                    // Call it with any number of arguments
-                    console.log(solve(1, 2, 3, 4)); // Output: 10
-
+                if (language === "JavaScript") {
+                    const result1 = judge_JavaScript(answer, JSON.stringify(test));
+                    const result2 = judge_JavaScript(response, JSON.stringify(test));
+                    console.log(result1, " vs ", result2);
+                    if (result1 !== result2) {
+                        failed += 1;
+                    }
+                } else {
+                    if (response.length < (body.length + test.toString().length)) {
+                        failed += 1;
+                    }
                 }
-
-
-                const pass = answer.length > (body.length + test.toString().length);
-
-
-                if (!pass) failed++;
             }
 
             const duration = Date.now() - start;
 
-            const finalStatus = failed === 0 ? 'PASSED' : 'FAILED';
+            const finalStatus = failed === 0 ? 'PASSED' : 'WRONG_ANSWER';
 
             // 4. Update DB
             await mysqlPool.query(
                 `UPDATE submissions
-             SET status = ?, nfailed = ?, time_used_msec = ?
-             WHERE id = ?`,
+                 SET status = ?, nfailed = ?, time_used_msec = ?
+                 WHERE id = ?`,
                 [finalStatus, failed, duration, submissionId]
             );
 

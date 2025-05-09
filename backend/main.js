@@ -99,17 +99,17 @@ app.get('/api/questions/:id', async (req, res) => {
 
 app.post('/api/questions/:id/submit', async (req, res) => {
   const userId = req.cookies.userId;
-  const { answer, language } = req.body;
+  const { response, language } = req.body;
   const questionId = parseInt(req.params.id);
 
-  if (!userId || !answer || !language) {
+  if (!userId || !response || !language) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
   const [result] = await mysqlPool.query(
-    `INSERT INTO submissions (question_id, user_id, answer, language, status, nfailed, time_used_msec)
+    `INSERT INTO submissions (question_id, user_id, response, language, status, nfailed, time_used_msec)
      VALUES (?, ?, ?, ?, 'INQUEUE', 0, NULL)`,
-    [questionId, userId, answer, language]
+    [questionId, userId, response, language]
   );
 
   const submissionId = result.insertId;
