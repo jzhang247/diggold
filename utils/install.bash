@@ -35,21 +35,19 @@ sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plug
 sudo usermod -aG docker $USER
 # newgrp docker
 
-
 # MiniKube
-# curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
-# sudo install minikube-linux-amd64 /usr/local/bin/
-
-
-
-
+curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+sudo install minikube-linux-amd64 /usr/local/bin/
 
 # Clang
-# sudo apt install -y clang
-
-
+sudo apt install -y clang
 
 # Certbot
-# sudo apt update
-# sudo apt install -y certbot
-# sudo certbot certonly --standalone -d rc.jzhang247.engineer
+sudo apt update
+sudo apt install -y certbot
+sudo certbot certonly --standalone -d rc.jzhang247.engineer
+
+
+
+
+
